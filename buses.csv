@@ -1,0 +1,11 @@
+﻿name,v_nom,type,x,y,carrier,unit,v_mag_pu_set,v_mag_pu_min,v_mag_pu_max,control,sub_network,p,q,v_mag_pu,v_ang,marginal_price
+CNQ,1,,0,0,AC,None,1,0,inf,PQ,,0,0,1,0,0
+GG,1,,0,0,AC,None,1,0,inf,PQ,,0,0,1,0,0
+SQ,1,,0,0,AC,None,1,0,inf,PQ,,0,0,1,0,0
+NNSW,1,,0,0,AC,None,1,0,inf,PQ,,0,0,1,0,0
+CNSW,1,,0,0,AC,None,1,0,inf,PQ,,0,0,1,0,0
+SNW,1,,0,0,AC,None,1,0,inf,PQ,,0,0,1,0,0
+SNSW,1,,0,0,AC,None,1,0,inf,PQ,,0,0,1,0,0
+VIC,1,,0,0,AC,None,1,0,inf,PQ,,0,0,1,0,0
+SA,1,,0,0,AC,None,1,0,inf,PQ,,0,0,1,0,0
+TAS,1,,0,0,AC,None,1,0,inf,PQ,,0,0,1,0,0

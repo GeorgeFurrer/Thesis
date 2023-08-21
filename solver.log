@@ -1,0 +1,25 @@
+GLPSOL--GLPK LP/MIP Solver 5.0
+Parameter(s) specified in the command line:
+ --lp /var/folders/sc/l0zwpk0931s5svlfxxd_fl7r0000gn/T/pypsa-problem-f337c9tu.lp
+ --output /var/folders/sc/l0zwpk0931s5svlfxxd_fl7r0000gn/T/pypsa-solvemkuziw_0.sol
+ --log solver.log
+Reading problem data from '/var/folders/sc/l0zwpk0931s5svlfxxd_fl7r0000gn/T/pypsa-problem-f337c9tu.lp'...
+50760 rows, 24481 columns, 78249 non-zeros
+268488 lines were read
+GLPK Simplex Optimizer 5.0
+50760 rows, 24481 columns, 78249 non-zeros
+Preprocessing...
+1800 rows, 20532 columns, 25269 non-zeros
+Scaling...
+ A: min|aij| =  1.000e+00  max|aij| =  1.000e+00  ratio =  1.000e+00
+Problem data seem to be well scaled
+Constructing initial basis...
+Size of triangular part is 1800
+      0: obj =   1.097237844e+08 inf =   9.833e+05 (502)
+   3154: obj =   8.687639016e+07 inf =   0.000e+00 (0)
+* 16362: obj =   1.660369837e+07 inf =   1.705e-13 (866) 8
+* 17888: obj =   1.519090038e+07 inf =   0.000e+00 (0) 3
+OPTIMAL LP SOLUTION FOUND
+Time used:   6.6 secs
+Memory used: 34.6 Mb (36254224 bytes)
+Writing basic solution to '/var/folders/sc/l0zwpk0931s5svlfxxd_fl7r0000gn/T/pypsa-solvemkuziw_0.sol'...

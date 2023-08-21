@@ -1,0 +1,23 @@
+﻿name,bus0,bus1,type,carrier,efficiency,build year,lifetime,p_nom,p_nom_extendable,p_nom_min,p_nom_max,p_set,p_min_pu,p_max_pu,capital_cost,marginal_cost,marginal_cost_quadratic,stand_by_cost,length,terrain_factor,committable,start_up_cost,shut_down_cost,min_up_time,min_down_time,up_time_before,down_time_before,ramp_limit_up,ramp_limit_down,ramp_limit_start_up,ramp_limit_shut_down,p0,p1,p_nom_opt,status,mu_lower,mu_upper,mu_p_set,mu_ramp_limit_up,mu_ramp_limit_down
+CNQ - GG,CNQ,GG,,AC,1,0,inf,700,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+GG - CNQ,GG,CNQ,,AC,1,0,inf,750,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+SQ - CNQ,SQ,CNQ,,AC,1,0,inf,700,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+CNQ - SQ,CNQ,SQ,,AC,1,0,inf,2100,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+NNSW - SQ 1,NNSW,SQ,,AC,1,0,inf,685,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+SQ - NNSW 1,SQ,NNSW,,AC,1,0,inf,1205,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+NNSW - SQ 2,NNSW,SQ,,AC,1,0,inf,0,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+SQ - NNSW 2,SQ,NNSW,,AC,1,0,inf,130,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+CNSW - NNSW ,CNSW,NNSW,,AC,1,0,inf,910,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+NNSW - CNSW,NNSW,CNSW,,AC,1,0,inf,930,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+CNSW - SNW ,CNSW,SNW,,AC,1,0,inf,7525,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+SNW - CNSW,SNW,CNSW,,AC,1,0,inf,6125,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+SNSW - CNSW,SNSW,CNSW,,AC,1,0,inf,2700,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+CNSW - SNSW,CNSW,SNSW,,AC,1,0,inf,2320,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+VIC - SNSW,VIC,SNSW,,AC,1,0,inf,870,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+SNSW - VIC,SNSW,VIC,,AC,1,0,inf,400,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+VIC - SA 1,VIC,SA,,AC,1,0,inf,650,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+SA - VIC 1,SA,VIC,,AC,1,0,inf,650,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+VIC - SA 2,VIC,SA,,AC,1,0,inf,220,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+SA - VIC 2,SA,VIC,,AC,1,0,inf,100,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+TAS - VIC,TAS,VIC,,AC,1,0,inf,478,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
+VIC - TAS,VIC,TAS,,AC,1,0,inf,478,FALSE,0,inf,0,0,1,0,0,0,0,0,1,FALSE,0,0,0,0,1,0,NaN,NaN,1,1,0,0,0,1,0,0,0,0,0
