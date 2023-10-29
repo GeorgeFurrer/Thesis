@@ -8,6 +8,7 @@ import logging
 import numpy as np
 from datetime import datetime
 import xarray as xr
+import sys
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,14 +18,15 @@ network = pypsa.Network()
 
 #INPUTS - Fill in as desired
 solver_name = "gurobi"  #Can be gurobi or GLPK
-candi_hourly_match_portion = 0.25 #portion of C&Is that hourly match
+candi_hourly_match_portion = 0.10 #portion of C&Is that hourly match
 investment_years = [2030,2035,2040] #Years to do capacity_output expansion
 optimise_frequency = 1 #hours per capacity expansion time slice
-r = 0.025 #discount rate
+r = 0.055 #discount rate
 upscale_demand_factor = 1 
 rpp = 0.1896
 CFE_score = 1
 folder_path = 'Results_csvs'
+#hydro_RE = False
 
 
 
@@ -58,8 +60,7 @@ def set_discount_rate():
         network.investment_period_weightings.at[period, "objective"] = sum(discounts)
         T += nyears
 set_discount_rate()
-#Set discount rate. Don't really know what this does honestly, I've modified it from PyPSA example
-
+#Set discount rate. 
 #%%
 
 #Read in the buses
@@ -98,7 +99,7 @@ def input_links():
                 "{}".format(row["name"]),
                 bus0 = row["bus0"],
                 bus1 = row["bus1"],
-                p_nom = np.float16(row["p_nom"]),
+                p_nom = row["p_nom"],
             )
 input_links()
 #Input the links between each bus (and future links)
@@ -121,11 +122,11 @@ def input_generators():
         "Generator",
         "{}".format(row["name"]),
         bus = row["bus"],
-        p_nom = np.float16(row["p_nom"]),
+        p_nom = row["p_nom"],
         #p_min_pu = row["p_min_pu"],
         carrier = row["carrier"],
-        marginal_cost = np.float16(row["marginal_cost"]),
-        start_up_cost = np.float16(row["start_up_cost"]), 
+        marginal_cost = row["marginal_cost"],
+        start_up_cost = row["start_up_cost"], 
         build_year = row["build_year"], 
         lifetime = row["lifetime"]
             )
@@ -165,7 +166,6 @@ input_generators_t_p_max_pu()
 def input_batteries():
     #lets import some batteries 
     storage_units = pd.read_csv('storage_units.csv',delimiter = ',')
-    storage_units["marginal_cost"] = storage_marginal_cost
     for index,row in storage_units.iterrows():
             network.add(
             "StorageUnit",
@@ -173,11 +173,11 @@ def input_batteries():
             bus = row["bus"],
             p_nom = row["p_nom"],
             max_hours = row["max_hours"], 
-            marginal_cost = np.float16(row["marginal_cost"]), 
+            marginal_cost = row["marginal_cost"], 
             lifetime = row["lifetime"],
             #capital_cost = row["capital_cost"].astype("float16"),
-            efficiency_store = np.float16(row["efficiency_store"]),
-            efficiency_dispatch = np.float16(row["efficiency_dispatch"])
+            efficiency_store = row["efficiency_store"],
+            efficiency_dispatch = row["efficiency_dispatch"]
             )
 input_batteries()
 #Input the batteries that will exist in 2025     
@@ -197,11 +197,11 @@ def input_dummy_extendable_generators():
             p_nom = row["p_nom"],
             #p_min_pu = row["p_min_pu"],
             carrier = row["carrier"],
-            marginal_cost = np.float16(row["marginal_cost"]),
+            marginal_cost = row["marginal_cost"],
             p_nom_extendable = True,
             build_year = row["build_year"],
             lifetime = int(row["lifetime"]), 
-            capital_cost = np.float16(row["capital_cost"])
+            capital_cost = row["capital_cost"]
         )
 input_dummy_extendable_generators()
 
@@ -230,13 +230,13 @@ def input_dummy_extendable_batteries():
             bus = row["bus"],
             p_nom = row["p_nom"],
             max_hours = row["max_hours"],
-            marginal_cost = np.float16(row["marginal_cost"]),
+            marginal_cost = row["marginal_cost"],
             p_nom_extendable = True,
             build_year = row["build_year"],
             lifetime = row["lifetime"],
-            capital_cost = np.float16(row["capital_cost"]), 
-            efficiency_store = np.float16(row["efficiency_store"]),
-            efficiency_dispatch = np.float16(row["efficiency_dispatch"])
+            capital_cost = row["capital_cost"], 
+            efficiency_store = row["efficiency_store"],
+            efficiency_dispatch = row["efficiency_dispatch"]
             )
 input_dummy_extendable_batteries()
 #Input Extendable/Dummy Batteries\
@@ -287,18 +287,18 @@ def load_profile():
         load_profile.plot.area()
         plt.legend(bbox_to_anchor = (1,1))
         plt.show()
-
 load_profile()
 
 #%%
 """CONSTRAINTS"""
 
 m = network.optimize.create_model(multi_investment_periods = True)
+
 #%%
 
 def hydro_constraint():
     max_hydro_inflow_per_day = 41980.45
-    max_hydro_inflow = np.float16((max_hydro_inflow_per_day * (len(network.snapshots)/24)))
+    max_hydro_inflow = (max_hydro_inflow_per_d(len(network.snapshots)/24))
 
     gen_carriers = network.generators.carrier
     gen_carriers = gen_carriers.to_xarray()
@@ -450,7 +450,7 @@ def hourly_matching_by_NEM(): #Ensures RE generation in the NEM exceeds aggregat
         is_solar = gen_carriers == "Solar"
         is_wind = gen_carriers == "Wind"
 
-        is_renewable = is_hydro | is_solar | is_wind
+        is_renewable = is_solar | is_wind | is_hydro 
         gen_p = m.variables["Generator-p"]
         renewable_power_variables = gen_p.where(is_renewable)
         gen_buses = network.generators.bus.to_xarray()
@@ -546,7 +546,7 @@ plt.ylabel("Initial Capacity (MW)")
 
 #%%
 
-network.optimize.solve_model(method = 2, crossover =0, solver_name = solver_name)
+network.optimize.solve_model(method = 2, crossover =0, MIPGap = 0.1, IntFeasTol = 1e-4, FeasabilityTol = 1e-4, FeasRelax =1, solver_name = solver_name)
 
 print("All done! Well done champion\n")
 
