@@ -18,7 +18,7 @@ network = pypsa.Network()
 
 #INPUTS - Fill in as desired
 solver_name = "gurobi"  #Can be gurobi or GLPK
-candi_hourly_match_portion = 0.10 #portion of C&Is that hourly match
+candi_hourly_match_portion = 0.10 #portion of C&Is that hourly or annually match
 investment_years = [2030,2035,2040] #Years to do capacity_output expansion
 optimise_frequency = 1 #hours per capacity expansion time slice
 r = 0.055 #discount rate
@@ -26,7 +26,7 @@ upscale_demand_factor = 1
 rpp = 0.1896
 CFE_score = 1
 folder_path = 'Results_csvs'
-#hydro_RE = False
+
 
 
 
@@ -284,8 +284,13 @@ def load_profile():
     for period in network.investment_periods:
         hrno = int((period - 2030)/5*8760) + 48
         load_profile = network.loads_t.p_set[hrno:(hrno+48)]
+        tick_labels = [f"{timestamp.day}/{timestamp.month} {timestamp.strftime('%H:%M')}" for timestamp in load_profile.index.get_level_values(1)]
+        # Plot the data
         load_profile.plot.area()
-        plt.legend(bbox_to_anchor = (1,1))
+        tick_positions = range(0, len(tick_labels), 12)  # Select every 12th position
+        plt.xticks(tick_positions, [tick_labels[i] for i in tick_positions], rotation=45)  # Set x-tick labels and rotate them for readability
+        plt.legend(bbox_to_anchor=(1, 1))
+        plt.title("{} Load Profile".format(period))
         plt.show()
 load_profile()
 
@@ -298,7 +303,7 @@ m = network.optimize.create_model(multi_investment_periods = True)
 
 def hydro_constraint():
     max_hydro_inflow_per_day = 41980.45
-    max_hydro_inflow = (max_hydro_inflow_per_d(len(network.snapshots)/24))
+    max_hydro_inflow = (max_hydro_inflow_per_day*(len(network.snapshots)/24))
 
     gen_carriers = network.generators.carrier
     gen_carriers = gen_carriers.to_xarray()
@@ -424,7 +429,7 @@ def annual_matching_by_NEM(): #Constraint ensures RE Generation across the NEM f
 
         m.add_constraints(constraint_expression_ann_match, name="100% RES_{}".format(period))
 
-annual_matching_by_NEM()
+#annual_matching_by_NEM()
 
 
 #%%
@@ -481,11 +486,11 @@ def hourly_matching_by_NEM(): #Ensures RE generation in the NEM exceeds aggregat
         m.add_constraints(constraint_expressions_hourly_match, name="Hourly_Match_{}".format(snapshot))
         i = i + 1
         print(i)
-hourly_matching_by_NEM()
+#hourly_matching_by_NEM()
 
 #%%
 
-def hourly_matching_by_region(): #NOT FINISHED - Ensures RE generation in every region exceeds C&I demand in every region in every hour. 
+def hourly_matching_by_region(): #Doesn't work - Ensures RE generation in every region exceeds C&I demand in every region in every hour. 
     i = 0
     #RHS - Need to get a DF where each row represents a bus, and each 
     hourly_match_candi_demand = pd.DataFrame()
@@ -542,7 +547,8 @@ initial_capacity = network.generators.p_nom.groupby(network.generators.carrier).
 initial_battery_capacity = network.storage_units.p_nom.sum()
 initial_capacity = pd.concat([initial_capacity,pd.Series([initial_battery_capacity],index = ["Battery"])])
 plt.bar(initial_capacity.index, initial_capacity)
-plt.ylabel("Initial Capacity (MW)")
+plt.ylabel("Capacity (MW)")
+plt.title("Initial 2025 Capacity (MW)")
 
 #%%
 
@@ -571,25 +577,25 @@ def capacity_results():
 
         battery_output["p_nom_opt_{}".format(period)] = network.storage_units.p_nom_opt.sum()
 
-        plt.bar(capacity_output.groupby(capacity_output.Technology)["p_nom_opt_{}".format(period)].sum().index, capacity_output.groupby(capacity_output.Technology)["p_nom_opt_{}".format(period)].sum())
-        plt.ylabel("p_nom_opt (MW)")
-        plt.show()
+        # plt.bar(capacity_output.groupby(capacity_output.Technology)["p_nom_opt_{}".format(period)].sum().index, capacity_output.groupby(capacity_output.Technology)["p_nom_opt_{}".format(period)].sum())
+        # plt.ylabel("p_nom_opt (MW)")
+        # plt.show()
             
-        new_opt_capacity = capacity_output.groupby(capacity_output.Technology)["p_nom_opt_{}".format(period)].sum() - initial_capacity[:-1]
-        plt.bar(new_opt_capacity.index, new_opt_capacity)
-        plt.ylabel("New capacity (MW)")
-        plt.show()
+        # new_opt_capacity = capacity_output.groupby(capacity_output.Technology)["p_nom_opt_{}".format(period)].sum() - initial_capacity[:-1]
+        # plt.bar(new_opt_capacity.index, new_opt_capacity)
+        # plt.ylabel("New capacity (MW)")
+        # plt.show()
 
         capacity["{}".format(period)] = capacity_output.groupby(capacity_output.Technology)["p_nom_opt_{}".format(period)].sum()
         capacity["{}".format(period)]["Battery"] = network.storage_units.p_nom_opt.sum()
-    #capacity = capacity.transpose()
+    
     ax = capacity.plot(kind='bar', stacked=False, figsize=(10, 6))
     plt.xlabel("Year")
     plt.ylabel("Capacity (MW)")
     plt.title("Optimal Capacity by Technology")
     plt.show()
 
-    #folder_path = 'Results_csvs'
+    folder_path = 'Results_csvs'
     capacity.to_csv(os.path.join(folder_path, 'capacity.csv')) 
 capacity_results()
 
@@ -598,40 +604,55 @@ capacity_results()
 
 def emissions_results():
 
-    emissions_df = pd.DataFrame()
+    emissions_by_gen_df = pd.DataFrame()
 
-    emissions_df["Carrier"] = network.generators.carrier #Add in the carrier of each generator
-    emissions_df["Region"] = network.generators.bus
-    emissions_df["Emissions_Intensity"] = network.carriers.co2_emissions[network.generators.carrier].tolist() #Add in the emissions intensity of each carrier
+    emissions_by_gen_df["Carrier"] = network.generators.carrier #Add in the carrier of each generator
+    emissions_by_gen_df["Region"] = network.generators.bus
+    emissions_by_gen_df["Emissions_Intensity"] = network.carriers.co2_emissions[network.generators.carrier].tolist() #Add in the emissions intensity of each carrier
 
-    emissions_df["Generation"] = network.generators_t.p.sum() #Add in sum of all generation across optimisation period
-    emissions_df["Emissions_Intensity"] = network.carriers.co2_emissions[network.generators.carrier].tolist() #Add in the emissions intensity of each carrier
-    emissions_df["Emissions"] = emissions_df["Generation"]*emissions_df["Emissions_Intensity"] #Total emissions is generation * emissions intensity
+    emissions_by_bus_df = pd.DataFrame()
+    emissions_intensity_by_bus_df = pd.DataFrame()
+    grid_emissions_intensity = pd.DataFrame()
 
 
+    for period in network.investment_periods:
 
-    plt.bar(emissions_df.Emissions.groupby(emissions_df.Carrier).sum().index,emissions_df.Emissions.groupby(emissions_df.Carrier).sum())
-    plt.ylabel("Total Emissions (tCO2eq")
+        emissions_by_gen_df["Generation_{}".format(period)] = network.generators_t.p.loc[period].sum() #Add in sum of all generation across optimisation period
+        emissions_by_gen_df["Emissions_{}".format(period)] =emissions_by_gen_df["Generation_{}".format(period)]/emissions_by_gen_df["Emissions_Intensity"] #Total emissions is generation * emissions intensity
+
+        emissions_by_bus_df["Emissions_{}".format(period)] = emissions_by_gen_df["Emissions_{}".format(period)].groupby(emissions_by_gen_df.Region).sum()
+
+        emissions_intensity_by_bus_df["{}".format(period)] = emissions_by_gen_df["Emissions_{}".format(period)].groupby(emissions_by_gen_df.Region).sum()/emissions_by_gen_df["Generation_{}".format(period)].groupby(emissions_by_gen_df.Region).sum()
+
+        total_emissions = emissions_by_gen_df["Emissions_{}".format(period)].sum()
+        total_generation = emissions_by_gen_df["Generation_{}".format(period)].sum()
+        #total_emissions = 1
+        #total_generation = 2
+        grid_emissions_intensity["{}".format(period)] = [total_emissions / total_generation]
+    
+    grid_emissions_intensity.index = ['NEM']
+
+    ei_df = pd.concat([emissions_intensity_by_bus_df,grid_emissions_intensity],sort=False)
+    ei_df.plot(kind='bar', stacked=False,figsize=(10,6))
+    plt.ylabel("Emissions Intensity (tCO2eq/MWh)")
+    plt.title("Emissions Intensity by Region")
     plt.show()
 
-    emissions_intensity_by_region = emissions_df.Emissions.groupby(emissions_df.Region).sum()/emissions_df.Generation.groupby(emissions_df.Region).sum()
-
-    grid_emissions_intensity = emissions_df.Emissions.sum()/emissions_df.Generation.sum()
-
-    emissions_intensity_by_region = pd.concat([emissions_intensity_by_region,pd.Series([grid_emissions_intensity], index = ["NEM"])])
-    plt.bar(emissions_intensity_by_region.index, emissions_intensity_by_region)
-    plt.ylabel("Emissions Intensity (tCO2eq/MWh)")
+    ax = emissions_by_bus_df.plot(kind='bar', stacked=False, figsize=(10, 6))
+    plt.xlabel("Region")
+    plt.ylabel("Emissions (tCO2-eq")
+    plt.title("Emissions by Region")
     plt.show()
     
-    #folder_path = 'Results_csvs'
-    emissions_intensity_by_region.to_csv(os.path.join(folder_path, 'emissions.csv'))
+    ax2 = emissions_by_bus_df.plot(kind='bar', stacked=True, figsize=(10, 6))
+    plt.xlabel("Region")
+    plt.ylabel("Emissions (tCO2-eq")
+    plt.title("Emissions by Region")
+    plt.show()
 
-    # for period in network.investment_periods:
-    #     starthr = ((period-2030)/5)*8760
-    #     endhr = ((period-2030)/5 + 1)*8760
-    #     emissions_df["Generation_{}".format(period)] = network.generators_t.p[starthr:endhr].sum() #Add in sum of all generation across optimisation period
-    #     emissions_df["Emissions_{}".format(period)] = emissions_df["Generation_{}".format(period)]*emissions_df["Emissions_Intensity"] #Total emissions is generation * emissions intensity
-    #     emissions_intensity_by_region["{}".format(period)] = emissions_df.groupby(emissions_df.Region)["Emissions_{}".format(period)].sum()/emissions_df.groupby(emissions_df.Region)["Generation_{}".format(period)].sum()
+    folder_path = 'Results_csvs'
+    ei_df.to_csv(os.path.join(folder_path, 'emissions.csv'))
+
 emissions_results()
 
 #%%
@@ -658,8 +679,6 @@ def generation_profile_no_batteries():
         colours = ["saddlebrown","black","brown", "orange", "blue", "yellow", "green"]
         generation_mix = network.generators_t.p[hrno:(hrno+48)].groupby(network.generators.carrier, axis =1).sum()
         ax1 = generation_mix.plot.area(color = colours)
-        #ax2 = ax1.twinx()
-        #ax2 = network.storage_units_t.state_of_charge[hrno:(hrno+48)].plot.line(ylabel = "Dispatch (MW)", ax = ax2)
         plt.legend().set_visible(False)
         plt.ylabel("Generation (MW)")
         plt.title(period)
