@@ -17,6 +17,9 @@ logging.basicConfig(level=logging.INFO)
 network = pypsa.Network()
 
 #INPUTS - Fill in as desired
+scenario = "BAU"
+hours_in_opt = 8760
+#months_to_optimise = 6
 solver_name = "gurobi"  #Can be gurobi or GLPK
 candi_hourly_match_portion = 0 #portion of C&Is that hourly or annually match
 investment_years = [2030,2035,2040] #Years to do capacity_output expansion
@@ -31,6 +34,7 @@ folder_path = 'Results_csvs'
 
 
 #%%
+
 def set_snapshots():
     snapshots = pd.DatetimeIndex([])
     for year in investment_years:
@@ -48,6 +52,7 @@ def set_snapshots():
 
     network.investment_period_weightings["years"] = list(np.diff(investment_years)) + [5]
 set_snapshots()
+
 #Set the snapshots to perform optimisation
 
 #%%
@@ -123,7 +128,7 @@ def input_generators():
         "{}".format(row["name"]),
         bus = row["bus"],
         p_nom = row["p_nom"],
-        #p_min_pu = row["p_min_pu"],
+        p_min_pu = row["p_min_pu"],
         carrier = row["carrier"],
         marginal_cost = row["marginal_cost"],
         start_up_cost = row["start_up_cost"], 
@@ -174,6 +179,7 @@ def input_batteries():
             p_nom = row["p_nom"],
             max_hours = row["max_hours"], 
             marginal_cost = row["marginal_cost"], 
+            build_year = row["build_year"],
             lifetime = row["lifetime"],
             #capital_cost = row["capital_cost"].astype("float16"),
             efficiency_store = row["efficiency_store"],
@@ -195,7 +201,7 @@ def input_dummy_extendable_generators():
              "{}".format(row["name"]),
             bus = row["bus"],
             p_nom = row["p_nom"],
-            #p_min_pu = row["p_min_pu"],
+            p_min_pu = row["p_min_pu"],
             carrier = row["carrier"],
             marginal_cost = row["marginal_cost"],
             p_nom_extendable = True,
@@ -215,8 +221,9 @@ def input_dummy_vre_trace_p_max_pu():
                 dummy_gen_name = column + " " + str(investment_year)
                 dummy_vre_trace_list = dummy_vre_trace[column][:len(network.snapshots)].tolist()
                 dummy_vre_trace_list = np.array(dummy_vre_trace_list, dtype=np.float16)
-                #print(network.generators.loc[dummy_gen_name]) #copies trace data across each of the years (2030,2035,2040)
                 network.generators_t.p_max_pu[dummy_gen_name] = dummy_vre_trace_list
+
+
 input_dummy_vre_trace_p_max_pu()
 
 #%%
@@ -282,7 +289,7 @@ candi_matching_loads,loads_less_candi_matching = input_loads()
 
 def load_profile():
     for period in network.investment_periods:
-        hrno = int((period - 2030)/5*8760) + 48
+        hrno = int((period - 2030)/5*((len(network.snapshots)-24)/3)) + 48
         load_profile = network.loads_t.p_set[hrno:(hrno+48)]
         tick_labels = [f"{timestamp.day}/{timestamp.month} {timestamp.strftime('%H:%M')}" for timestamp in load_profile.index.get_level_values(1)]
         # Plot the data
@@ -319,14 +326,14 @@ hydro_constraint()
 
 #%%
 
-def annual_regional_matching(): # Constraint ensures RE generation in a region over the year > C&I consumption over the year in the same region
+def annual_matching_by_region(): # Constraint ensures RE generation in a region over the year > C&I consumption over the year in the same region
     
     for period in network.investment_periods:
 
         #RHS - Needs to be a fixed value. Energy Consumed by CandI loads, plus the RPP 
 
-        period_start = int(((period - 2030)/5)*8760)
-        period_end  = int((((period - 2030)/5)+ 1)*8760)
+        period_start = int(((period - 2030)/5)*hours_in_opt)
+        period_end  = int((((period - 2030)/5)+ 1)*hours_in_opt)
 
         matching_candi_consumption = pd.DataFrame()
 
@@ -351,10 +358,10 @@ def annual_regional_matching(): # Constraint ensures RE generation in a region o
             gen_carriers = network.generators.carrier*network.get_active_assets("Generator",period)
             gen_carriers = gen_carriers.to_xarray()
 
-            is_hydro = gen_carriers == "Hydro"
+            #is_hydro = gen_carriers == "Hydro"
             is_solar = gen_carriers == "Solar"
             is_wind = gen_carriers == "Wind"
-            is_renewable = is_hydro | is_solar | is_wind
+            is_renewable =  is_solar | is_wind #| is_hydro
             gen_p = m.variables["Generator-p"]
             renewable_power_variables = gen_p.where(is_renewable)
             # double checking using pandas
@@ -380,7 +387,7 @@ def annual_regional_matching(): # Constraint ensures RE generation in a region o
             #print(constraint_expression_ann_match)
             m.add_constraints(constraint_expression_ann_match, name="100% RES_{}_{}".format(region,period))
 
-#annual_regional_matching()
+#annual_matching_by_region()
 
 #%%
 
@@ -390,8 +397,8 @@ def annual_matching_by_NEM(): #Constraint ensures RE Generation across the NEM f
 
         #RHS - Needs to be a fixed value. Energy Consumed by CandI loads, plus the RPP 
 
-        period_start = int(((period - 2030)/5)*8760)
-        period_end  = int((((period - 2030)/5)+ 1)*8760)
+        period_start = int(((period - 2030)/5)*hours_in_opt)
+        period_end  = int((((period - 2030)/5)+ 1)*hours_in_opt)
 
         matching_candi_consumption = pd.DataFrame()
 
@@ -415,10 +422,10 @@ def annual_matching_by_NEM(): #Constraint ensures RE Generation across the NEM f
         gen_carriers = network.generators.carrier*network.get_active_assets("Generator",period)
         gen_carriers = gen_carriers.to_xarray()
 
-        is_hydro = gen_carriers == "Hydro"
+        #is_hydro = gen_carriers == "Hydro"
         is_solar = gen_carriers == "Solar"
         is_wind = gen_carriers == "Wind"
-        is_renewable = is_solar | is_wind |is_hydro 
+        is_renewable = is_solar | is_wind #|is_hydro 
         gen_p = m.variables["Generator-p"]
         renewable_power_variables = gen_p.where(is_renewable)
 
@@ -428,8 +435,7 @@ def annual_matching_by_NEM(): #Constraint ensures RE Generation across the NEM f
         constraint_expression_ann_match = annual_renewable_gen_sum >= net_re_consumption
 
         m.add_constraints(constraint_expression_ann_match, name="100% RES_{}".format(period))
-
-annual_matching_by_NEM()
+#annual_matching_by_NEM()
 
 
 #%%
@@ -506,11 +512,11 @@ def hourly_matching_by_region(): #Doesn't work - Ensures RE generation in every 
             gen_carriers = network.generators.carrier*network.get_active_assets("Generator",snapshot[0])
             gen_carriers = gen_carriers.to_xarray()
 
-            is_hydro = gen_carriers == "Hydro"
+            #is_hydro = gen_carriers == "Hydro"
             is_solar = gen_carriers == "Solar"
             is_wind = gen_carriers == "Wind"
 
-            is_renewable = is_hydro | is_solar | is_wind
+            is_renewable = is_solar | is_wind #| is_hydro
             gen_p = m.variables["Generator-p"]
             renewable_power_variables = gen_p.where(is_renewable)
             gen_buses = network.generators.bus.to_xarray()
@@ -572,10 +578,11 @@ def capacity_results():
 
     for period in network.investment_periods:
         capacity_output["Active_Status_{}".format(period)] = network.get_active_assets("Generator",period)
-        capacity_output["p_nom_{}".format(period)] = network.generators.p_nom * capacity_output["Active_Status_{}".format(period)]
+        
+        #capacity_output["p_nom_{}".format(period)] = network.generators.p_nom * capacity_output["Active_Status_{}".format(period)]
         capacity_output["p_nom_opt_{}".format(period)] = network.generators.p_nom_opt * capacity_output["Active_Status_{}".format(period)]
 
-        battery_output["p_nom_opt_{}".format(period)] = network.storage_units.p_nom_opt.sum()
+        battery_output["p_nom_opt_{}".format(period)] = network.storage_units.p_nom_opt * network.get_active_assets("StorageUnit",period)
 
         # plt.bar(capacity_output.groupby(capacity_output.Technology)["p_nom_opt_{}".format(period)].sum().index, capacity_output.groupby(capacity_output.Technology)["p_nom_opt_{}".format(period)].sum())
         # plt.ylabel("p_nom_opt (MW)")
@@ -587,7 +594,7 @@ def capacity_results():
         # plt.show()
 
         capacity["{}".format(period)] = capacity_output.groupby(capacity_output.Technology)["p_nom_opt_{}".format(period)].sum()
-        capacity["{}".format(period)]["Battery"] = network.storage_units.p_nom_opt.sum()
+        capacity["{}".format(period)]["Battery"] = battery_output["p_nom_opt_{}".format(period)].sum()
     
     ax = capacity.plot(kind='bar', stacked=False, figsize=(10, 6))
     plt.xlabel("Year")
@@ -596,7 +603,9 @@ def capacity_results():
     plt.show()
 
     folder_path = 'Results_csvs'
-    capacity.to_csv(os.path.join(folder_path, 'capacity.csv')) 
+    capacity.to_csv(os.path.join(folder_path, 'capacity_grouped_{}.csv'.format(scenario)))
+    capacity_output.to_csv(os.path.join(folder_path, 'capacity_output_{}.csv'.format(scenario)))
+    battery_output.to_csv(os.path.join(folder_path, 'battery_output_{}.csv'.format(scenario)))   
 capacity_results()
 
 
@@ -619,7 +628,7 @@ def emissions_results():
     for period in network.investment_periods:
 
         emissions_by_gen_df["Generation_{}".format(period)] = network.generators_t.p.loc[period].sum() #Add in sum of all generation across optimisation period
-        emissions_by_gen_df["Emissions_{}".format(period)] = np.where(np.abs(emissions_by_gen_df["Emissions_Intensity"]) < threshold, 0, emissions_by_gen_df["Generation_{}".format(period)] / emissions_by_gen_df["Emissions_Intensity"])
+        emissions_by_gen_df["Emissions_{}".format(period)] = np.where(np.abs(emissions_by_gen_df["Emissions_Intensity"]) < threshold, 0, emissions_by_gen_df["Generation_{}".format(period)] * emissions_by_gen_df["Emissions_Intensity"])
         emissions_by_gen_df["Emissions_{}".format(period)] = emissions_by_gen_df["Emissions_{}".format(period)].fillna(0)
 
         emissions_by_bus_df["Emissions_{}".format(period)] = emissions_by_gen_df["Emissions_{}".format(period)].groupby(emissions_by_gen_df.Region).sum()
@@ -652,8 +661,9 @@ def emissions_results():
     plt.show()
 
     folder_path = 'Results_csvs'
-    ei_df.to_csv(os.path.join(folder_path, 'emissions_intensity.csv'))
-    emissions_by_bus_df.to_csv(os.path.join(folder_path, 'total_emissions.csv'))
+    ei_df.to_csv(os.path.join(folder_path, 'emissions_intensity_grouped.csv'))
+    emissions_by_bus_df.to_csv(os.path.join(folder_path, 'total_emissions_grouped.csv'))
+    emissions_by_gen_df.to_csv(os.path.join(folder_path, 'emissions_gen_{}.csv'.format(scenario)))
 
 emissions_results()
 
@@ -661,7 +671,7 @@ emissions_results()
 def generation_profile():
 
     for period in network.investment_periods:
-        hrno = int((period - 2030)/5*8760) + 48
+        hrno = int((period - 2030)/5*hours_in_opt) + 48
         colours = ["saddlebrown","black","brown", "orange", "blue", "yellow", "green"]
         ax1 = network.generators_t.p[hrno:(hrno+48)].groupby(network.generators.carrier, axis =1).sum().plot.area(color = colours)
         ax2 = ax1.twinx()
@@ -677,7 +687,7 @@ generation_profile()
 def generation_profile_no_batteries():
 
     for period in network.investment_periods:
-        hrno = int((period - 2030)/5*8760) + 48
+        hrno = int((period - 2030)/5*hours_in_opt) + 48
         colours = ["saddlebrown","black","brown", "orange", "blue", "yellow", "green"]
         generation_mix = network.generators_t.p[hrno:(hrno+48)].groupby(network.generators.carrier, axis =1).sum()
         ax1 = generation_mix.plot.area(color = colours)
@@ -686,7 +696,7 @@ def generation_profile_no_batteries():
         plt.title(period)
         plt.show()
         #folder_path = 'Results_csvs'
-        generation_mix.to_csv(os.path.join(folder_path, 'generation_mix.csv'))
+        generation_mix.to_csv(os.path.join(folder_path, 'generation_mix_{}.csv'.format(period)))
 
 generation_profile_no_batteries()
 
@@ -695,7 +705,7 @@ generation_profile_no_batteries()
 
 
 # hourly_matching_by_region()
-# def annual_regional_matching(): 
+# def annual_matching_by_region(): 
 #             #matching_candi_consumption["non_candi_RPP_consumption"] = matching_candi_consumption["non_candi_RPP_consumpti    #100% Annual Matching Constraint, this doesn't distinguish by bus yet
 #     for period in network.investment_periods:
 
@@ -756,7 +766,7 @@ generation_profile_no_batteries()
 #             constraint_expression_ann_match = annual_renewable_bus_power_sum >= net_re_consumption_by_region
 #             m.add_constraints(constraint_expression_ann_match, name="100% RES_{}_{}".format(region,period))
 
-#annual_regional_matching()
+#annual_matching_by_region()
 
 #%%
 
