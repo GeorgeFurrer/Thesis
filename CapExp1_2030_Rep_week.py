@@ -212,7 +212,7 @@ input_batteries()
 
 
 def input_dummy_extendable_generators():
-    dummy_gens = pd.read_csv("extendable_generators.csv")
+    dummy_gens = pd.read_csv("extendable_generators_v02.csv")
 
     for index, row in dummy_gens.iterrows():
         network.add(
@@ -248,7 +248,7 @@ input_dummy_vre_trace_p_max_pu()
 #%%
 
 def input_dummy_extendable_batteries(): 
-    dummy_batteries = pd.read_csv("extendable_storage_units.csv")
+    dummy_batteries = pd.read_csv("extendable_storage_units_v02.csv")
     for index, row in dummy_batteries.iterrows(): 
             network.add(
             "StorageUnit",
@@ -330,7 +330,7 @@ m = network.optimize.create_model(multi_investment_periods = True)
 def hydro_constraint():
     for period in network.investment_periods:
         max_hydro_inflow_per_day = 41980.45
-        max_hydro_inflow = (max_hydro_inflow_per_day*(len(network.snapshots)/(24*len(network.investment_periods))))
+        max_hydro_inflow_per_year = (max_hydro_inflow_per_day*(len(network.snapshots)/(24*len(network.investment_periods))))
 
         gen_carriers = network.generators.carrier*network.get_active_assets("Generator",period)
         gen_carriers = gen_carriers.to_xarray()
@@ -340,7 +340,7 @@ def hydro_constraint():
 
         hydro_generation = hydro_generators.loc[period].sum("Generator").sum()
 
-        constraint_expression1 = hydro_generation <= max_hydro_inflow
+        constraint_expression1 = hydro_generation <= max_hydro_inflow_per_year
         m.add_constraints(constraint_expression1, name="Hydro-Max_Generation_{}".format(period))
 hydro_constraint()
 
@@ -472,20 +472,17 @@ def hourly_matching_by_NEM(): #Ensures RE generation in the NEM exceeds aggregat
     #LHS - Variables are Generation from RE assets, + dispat+ch - storage of batteries
     for snapshot in network.snapshots:
 
-        #for region in network.buses.index:
         #FIRST - RE Generation variable set up 
         gen_carriers = network.generators.carrier*network.get_active_assets("Generator",snapshot[0])
         gen_carriers = gen_carriers.to_xarray()
 
-        #Need to return the generators that are in the C&I subset
-        boolean_array = network.generators.index.str.startswith("C&I")
-        # Create an xarray DataArray from the boolean array
-        
-        boolean_array = network.generators.index.str.startswith("C&I")
+        #Need to return the generators and batteries that are in the C&I subset
+        boolean_gens = network.generators.index.str.startswith("C&I")
+        boolean_batteries = network.storage_units.index.str.startswith("C&I")
 
-        # Create an xarray DataArray from the boolean array
-        candi_portfolio = xr.DataArray(boolean_array, coords={'Generator': network.generators.index}, dims=('Generator',))
-
+        # Create an xarray DataArray from the boolean arrays
+        candi_gens_portfolio = xr.DataArray(boolean_gens, coords={'Generator': network.generators.index}, dims=('Generator',))
+        candi_batteries_portfolio = xr.DataArray(boolean_batteries, coords={'StorageUnit': network.storage_units.index}, dims = ("StorageUnit",))
 
         #is_hydro = gen_carriers == "Hydro"
         is_solar = gen_carriers == "Solar"
@@ -493,7 +490,7 @@ def hourly_matching_by_NEM(): #Ensures RE generation in the NEM exceeds aggregat
 
         is_renewable = is_solar | is_wind #| is_hydro 
 
-        is_procurable = is_renewable & candi_portfolio
+        is_procurable = is_renewable & candi_gens_portfolio
         gen_p = m.variables["Generator-p"]
         renewable_power_variables = gen_p.where(is_renewable)
         gen_buses = network.generators.bus.to_xarray()
@@ -504,8 +501,8 @@ def hourly_matching_by_NEM(): #Ensures RE generation in the NEM exceeds aggregat
         hourly_renewable_power_bus_sum = hourly_renewable_power_bus_sum.loc[snapshot[0]].loc[snapshot[1]]
 
         #SECOND - Battery dispatch variable set up 
-        battery_dispatch = m.variables["StorageUnit-p_dispatch"]
-        battery_store = m.variables["StorageUnit-p_store"]
+        battery_dispatch = m.variables["StorageUnit-p_dispatch"].where(candi_batteries_portfolio)
+        battery_store = m.variables["StorageUnit-p_store"].where(candi_batteries_portfolio)
 
         #battery_buses = network.storage_units.bus.to_xarray()
         #curr_batt_bus = battery_buses == region
