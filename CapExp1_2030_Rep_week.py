@@ -328,19 +328,20 @@ m = network.optimize.create_model(multi_investment_periods = True)
 #%%
 
 def hydro_constraint():
-    max_hydro_inflow_per_day = 41980.45
-    max_hydro_inflow = (max_hydro_inflow_per_day*(len(network.snapshots)/24))
+    for period in network.investment_periods:
+        max_hydro_inflow_per_day = 41980.45
+        max_hydro_inflow = (max_hydro_inflow_per_day*(len(network.snapshots)/(24*len(network.investment_periods))))
 
-    gen_carriers = network.generators.carrier
-    gen_carriers = gen_carriers.to_xarray()
-    gen_p = m.variables["Generator-p"] 
+        gen_carriers = network.generators.carrier*network.get_active_assets("Generator",period)
+        gen_carriers = gen_carriers.to_xarray()
+        gen_p = m.variables["Generator-p"]
+        hydro_generators = gen_p.where(gen_carriers == "Hydro")
+        #hydro_generators = gen_carriers.where(gen_carriers == "Hydro")
 
-    hydro_generators = gen_carriers.where(gen_carriers == "Hydro")
+        hydro_generation = hydro_generators.loc[period].sum("Generator").sum()
 
-    hydro_generation = gen_p.groupby(hydro_generators).sum().sum("snapshot")
-
-    constraint_expression1 = hydro_generation <= max_hydro_inflow
-    m.add_constraints(constraint_expression1, name="Hydro-Max_Generation")
+        constraint_expression1 = hydro_generation <= max_hydro_inflow
+        m.add_constraints(constraint_expression1, name="Hydro-Max_Generation_{}".format(period))
 hydro_constraint()
 
 #%%
@@ -476,11 +477,23 @@ def hourly_matching_by_NEM(): #Ensures RE generation in the NEM exceeds aggregat
         gen_carriers = network.generators.carrier*network.get_active_assets("Generator",snapshot[0])
         gen_carriers = gen_carriers.to_xarray()
 
+        #Need to return the generators that are in the C&I subset
+        boolean_array = network.generators.index.str.startswith("C&I")
+        # Create an xarray DataArray from the boolean array
+        
+        boolean_array = network.generators.index.str.startswith("C&I")
+
+        # Create an xarray DataArray from the boolean array
+        candi_portfolio = xr.DataArray(boolean_array, coords={'Generator': network.generators.index}, dims=('Generator',))
+
+
         #is_hydro = gen_carriers == "Hydro"
         is_solar = gen_carriers == "Solar"
         is_wind = gen_carriers == "Wind"
 
         is_renewable = is_solar | is_wind #| is_hydro 
+
+        is_procurable = is_renewable & candi_portfolio
         gen_p = m.variables["Generator-p"]
         renewable_power_variables = gen_p.where(is_renewable)
         gen_buses = network.generators.bus.to_xarray()
@@ -622,7 +635,7 @@ def capacity_results():
     plt.title("Optimal Capacity by Technology")
     plt.show()
 
-    folder_path = 'Results_csvs'
+    folder_path = '00_Capacity_csvs'
     capacity.to_csv(os.path.join(folder_path, 'capacity_grouped_{}.csv'.format(scenario)))
     capacity_output.to_csv(os.path.join(folder_path, 'capacity_output_{}.csv'.format(scenario)))
     battery_output.to_csv(os.path.join(folder_path, 'battery_output_{}.csv'.format(scenario)))   
@@ -680,7 +693,7 @@ def emissions_results():
     plt.title("Emissions by Region")
     plt.show()
 
-    folder_path = 'Results_csvs'
+    folder_path = '01_Emissions_csvs'
     ei_df.to_csv(os.path.join(folder_path, 'emissions_intensity_grouped.csv'))
     emissions_by_bus_df.to_csv(os.path.join(folder_path, 'total_emissions_grouped.csv'))
     emissions_by_gen_df.to_csv(os.path.join(folder_path, 'emissions_gen_{}.csv'.format(scenario)))
@@ -715,7 +728,7 @@ def generation_profile_no_batteries():
         plt.ylabel("Generation (MW)")
         plt.title(period)
         plt.show()
-        #folder_path = 'Results_csvs'
+        folder_path = 'Emissions_csvs'
         generation_mix.to_csv(os.path.join(folder_path, 'generation_mix_{}.csv'.format(period)))
 
 generation_profile_no_batteries()
