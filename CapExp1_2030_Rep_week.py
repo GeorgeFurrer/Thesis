@@ -17,13 +17,12 @@ logging.basicConfig(level=logging.INFO)
 network = pypsa.Network()
 
 #INPUTS - Fill in as desired
-scenario = "BAU"
+scenario = "Hourly100"
 hours_in_opt = 672
 peak_weighting = 5
 offpeak_weighting = 45
-#months_to_optimise = 6
 solver_name = "gurobi"  #Can be gurobi or GLPK
-candi_hourly_match_portion = 0.25 #portion of C&Is that hourly or annually match
+candi_hourly_match_portion = 1 #portion of C&Is that hourly or annually match
 investment_years = [2030,2035,2040] #Years to do capacity_output expansion
 optimise_frequency = 1 #hours per capacity expansion time slice
 r = 0.055 #discount rate
@@ -131,7 +130,7 @@ input_links()
 #%%
 
 def input_generators():
-    generators = pd.read_csv('generators.csv',delimiter = ',')
+    generators = pd.read_csv('generators_v02.csv',delimiter = ',')
 
     #ensure numerical data are floats and not strings
 
@@ -290,7 +289,7 @@ def input_loads():
     #Perform element-wise subtraction and fill the loads_less_candi_matching DataFrame
     for column in loads_less_candi_matching.columns:
         loads_less_candi_matching[column] = loads[column] - candi_matching_loads[column]
-        loads_less_candi_matching[column] = loads_less_candi_matching[column].clip(lower=0)
+        #loads_less_candi_matching[column] = loads_less_candi_matching[column].clip(lower=0)
     #Now, lets input the two loads into the model   
     for regionID in candi_matching_loads.columns[:11]:
         temp_col = candi_matching_loads[regionID][:len(network.snapshots)].tolist()
@@ -318,7 +317,7 @@ def load_profile():
         plt.legend(bbox_to_anchor=(1, 1))
         plt.title("{} Load Profile".format(period))
         plt.show()
-load_profile()
+#load_profile()
 
 #%%
 """CONSTRAINTS"""
@@ -329,7 +328,7 @@ m = network.optimize.create_model(multi_investment_periods = True)
 
 def hydro_constraint():
     for period in network.investment_periods:
-        max_hydro_inflow_per_day = 41980.45
+        max_hydro_inflow_per_day = 41980.45        
         max_hydro_inflow_per_year = (max_hydro_inflow_per_day*(len(network.snapshots)/(24*len(network.investment_periods))))
 
         gen_carriers = network.generators.carrier*network.get_active_assets("Generator",period)
@@ -449,13 +448,13 @@ def annual_matching_by_NEM(): #Constraint ensures RE Generation across the NEM f
         gen_p = m.variables["Generator-p"]
         renewable_power_variables = gen_p.where(is_renewable)
 
-        annual_renewable_gen_sum = renewable_power_variables.sum("Generator").loc[period].sum() #Doesn't really work
+        annual_renewable_gen_sum = renewable_power_variables.sum("Generator").loc[period].sum()
         net_re_consumption = matching_candi_consumption["Net_RE_Consumption"].sum()
 
         constraint_expression_ann_match = annual_renewable_gen_sum >= net_re_consumption
 
         m.add_constraints(constraint_expression_ann_match, name="100% RES_{}".format(period))
-#annual_matching_by_NEM()
+annual_matching_by_NEM()
 
 
 #%%
@@ -492,7 +491,7 @@ def hourly_matching_by_NEM(): #Ensures RE generation in the NEM exceeds aggregat
 
         is_procurable = is_renewable & candi_gens_portfolio
         gen_p = m.variables["Generator-p"]
-        renewable_power_variables = gen_p.where(is_renewable)
+        renewable_power_variables = gen_p.where(is_procurable)
         gen_buses = network.generators.bus.to_xarray()
         #curr_gen_bus = gen_buses == region
         #bus_variables = gen_buses.where(curr_gen_bus)
@@ -521,7 +520,7 @@ def hourly_matching_by_NEM(): #Ensures RE generation in the NEM exceeds aggregat
         m.add_constraints(constraint_expressions_hourly_match, name="Hourly_Match_{}".format(snapshot))
         i = i + 1
         print(i)
-#hourly_matching_by_NEM()
+hourly_matching_by_NEM()
 
 #%%
 
@@ -584,7 +583,8 @@ initial_capacity = pd.concat([initial_capacity,pd.Series([initial_battery_capaci
 plt.bar(initial_capacity.index, initial_capacity)
 plt.ylabel("Capacity (MW)")
 plt.title("Initial 2025 Capacity (MW)")
-
+folder_path = '00_Capacity_csvs'
+#initial_capacity.to_csv(os.path.join(folder_path, 'intial_capacity_{}.csv'.format(scenario)))
 #%%
 
 network.optimize.solve_model(method = 2, crossover =0, MIPGap = 0.1, IntFeasTol = 1e-4, FeasabilityTol = 1e-4, FeasRelax =1, solver_name = solver_name)
@@ -605,6 +605,9 @@ def capacity_results():
     capacity_output["Region"] = network.generators.bus
     capacity_output["Technology"] = network.generators.carrier
     capacity_output["p_nom_extendable"] = network.generators.p_nom_extendable
+
+    battery_output["duration"] = network.storage_units.max_hours
+    battery_output["p_nom_extendable"] = network.storage_units.p_nom_extendable
 
     for period in network.investment_periods:
         capacity_output["Active_Status_{}".format(period)] = network.get_active_assets("Generator",period)
@@ -642,7 +645,7 @@ capacity_results()
 #%%
 
 def emissions_results():
-    threshold = 1e-6
+    threshold = 1e-10
 
     emissions_by_gen_df = pd.DataFrame()
 
@@ -691,8 +694,8 @@ def emissions_results():
     plt.show()
 
     folder_path = '01_Emissions_csvs'
-    ei_df.to_csv(os.path.join(folder_path, 'emissions_intensity_grouped.csv'))
-    emissions_by_bus_df.to_csv(os.path.join(folder_path, 'total_emissions_grouped.csv'))
+    ei_df.to_csv(os.path.join(folder_path, 'emissions_intensity_grouped_{}.csv'.format(scenario)))
+    emissions_by_bus_df.to_csv(os.path.join(folder_path, 'total_emissions_grouped_{}.csv'.format(scenario)))
     emissions_by_gen_df.to_csv(os.path.join(folder_path, 'emissions_gen_{}.csv'.format(scenario)))
 
 emissions_results()
@@ -725,12 +728,28 @@ def generation_profile_no_batteries():
         plt.ylabel("Generation (MW)")
         plt.title(period)
         plt.show()
-        folder_path = 'Emissions_csvs'
-        generation_mix.to_csv(os.path.join(folder_path, 'generation_mix_{}.csv'.format(period)))
+        folder_path = '01_Emissions_csvs/generation_mixes'
+        generation_mix.to_csv(os.path.join(folder_path, 'generation_mix_{}_{}.csv'.format(period, scenario)))
 
 generation_profile_no_batteries()
 
 #%%
 
+def curtailment():
+    p_by_carrier = network.generators_t.p.groupby(network.generators.carrier, axis=1).sum()
 
+    p_available = network.generators_t.p_max_pu.multiply(network.generators["p_nom"])
+    p_available_by_carrier = p_available.groupby(network.generators.carrier, axis=1).sum()
+    p_curtailed_by_carrier = p_available_by_carrier - p_by_carrier
 
+    curtailment = pd.DataFrame()
+
+    for period in network.investment_periods:
+        curtailment[period] = p_curtailed_by_carrier.loc[period].sum()
+    
+    curtailment *= -1
+    folder_path = '01_Emissions_csvs'
+    curtailment.to_csv(os.path.join(folder_path, 'curtailment_{}.csv'.format(scenario)))
+
+curtailment()
+# %%
